@@ -1,0 +1,75 @@
+# ----------------------------------------------------------------------------------------------------
+# Template to build Azure Function and create artifacts
+# ----------------------------------------------------------------------------------------------------
+parameters: 
+- name: variableGroupName
+  default:  'myVariableGroup'
+- name: environmentName
+  default:  'DEV'
+- name: appFolder
+  default:  'src/myProjectFolder/'
+- name: appProject
+  default:  'myProject.csproj'
+
+# ----------------------------------------------------------------------------------------------------
+jobs:
+- deployment: InitializeBuild${{ parameters.environmentName }}Function
+  displayName: Initialize ${{ parameters.environmentName }} Build Function
+  environment: ${{ parameters.environmentName }}
+
+- job: Build${{ parameters.environmentName }}FuncApp
+  displayName: Build ${{ parameters.environmentName }} Func App
+  
+  variables:
+    - group: ${{ parameters.variableGroupName }}
+    - name: appFolder
+      value: ${{ parameters.appFolder }}
+    - name: appProject
+      value: ${{ parameters.appProject }}
+
+  steps:
+  - bash: |
+      echo "Build.ArtifactStagingDirectory=$(Build.ArtifactStagingDirectory)"
+      echo "System.DefaultWorkingDirectory=$(System.DefaultWorkingDirectory)"
+      echo "Build.BuildId=$(Build.BuildId)"
+      echo "appName=$(appName)"
+      echo "appFolder=$(appFolder)"
+      echo "appProject=$(appProject)"
+      echo "projectParm=$(appFolder)$(appProject)"
+      echo "Directory of pipeline workspace:"
+    continueOnError: true
+    displayName: 'Display Variables'
+    # echo "Directory of pipeline workspace:"
+    # tree $(Pipeline.Workspace)
+    # echo "Directory of System.DefaultWorkingDirectory:"
+    # tree $(System.DefaultWorkingDirectory)
+
+  - task: CmdLine@2
+    displayName: 'Show Directory List'
+    inputs:
+      script: |
+        echo "Directory of System.DefaultWorkingDirectory:"
+        dir $(System.DefaultWorkingDirectory) /s
+    continueOnError: true
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build project'
+    inputs:
+      projects: '$(appFolder)$(appProject)'
+      arguments: '--output publish_output --configuration Release'
+
+  - task: ArchiveFiles@2
+    displayName: 'Zip Output'
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)/publish_output'
+      includeRootFolder: false
+      archiveType: zip
+      archiveFile: $(Build.ArtifactStagingDirectory)/$(appName)$(Build.BuildId).zip
+      replaceExistingArchive: true
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish Artifact'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)'
+      artifact: 'functionmodule'
+      publishLocation: 'pipeline'

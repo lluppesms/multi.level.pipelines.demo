@@ -1,0 +1,177 @@
+# ----------------------------------------------------------------------------------------------------
+# Template to deploy Azure Resources for one environment
+# ----------------------------------------------------------------------------------------------------
+parameters:
+- name: appVariableGroupName
+  default: 'myAppVariableGroup'
+- name: companyVariableGroupName
+  default: 'myCompanyVariableGroup'
+- name: plantVariableGroupName
+  default: 'myPlantVariableGroup'
+- name: lineVariableGroupName
+  default: 'myLineVariableGroup'
+- name: environmentName
+  default: 'DEV'
+- name: templateFolderName
+  default: 'infra/Bicep'
+- name: lineTemplateFileName
+  default: 'main-line.bicep'
+- name: plantTemplateFileName
+  default: 'main-plant.bicep'
+- name: createInfra
+  default: false
+  
+# ----------------------------------------------------------------------------------------------------
+jobs:
+- deployment: CreateInfra
+  displayName: Initialize Create Infra 
+  environment: ${{ parameters.environmentName }}
+
+- job: CreateInfraJob
+  displayName: Create  Infra ${{ parameters.environmentName }}
+  variables:
+    - group: ${{ parameters.appVariableGroupName }}
+    - group: ${{ parameters.companyVariableGroupName }}
+    - group: ${{ parameters.plantVariableGroupName }}
+    - group: ${{ parameters.lineVariableGroupName }}
+    - name: environmentNameUpper
+      value: ${{ upper(parameters.environmentName) }}
+    - name: environmentNameLower
+      value: ${{ lower(parameters.environmentName) }}
+    - name: lineTemplateFile
+      value: '$(Pipeline.Workspace)/s/${{ parameters.templateFolderName }}/${{ parameters.lineTemplateFileName }}'
+    - name: plantTemplateFile
+      value: '$(Pipeline.Workspace)/s/${{ parameters.templateFolderName }}/${{ parameters.plantTemplateFileName }}'
+    - name: compiledJsonFile
+      value: '${{ parameters.templateFolderName }}/compiled.json'
+    - name: createInfraVar
+      value: ${{ parameters.createInfra }}
+    - name: resourceGroupLine
+      value: $(resourceGroupName)
+
+  steps:
+  - bash: |
+      orgNameLower=$(echo "$(orgName)" | tr '[:upper:]' '[:lower:]')
+      echo "orgName=$(orgName)"
+      echo "orgNameLower=$orgNameLower"
+      echo "##vso[task.setvariable variable=orgNameLower]$orgNameLower"
+
+      appNameLower=$(echo "$(appName)" | tr '[:upper:]' '[:lower:]')
+      echo "appName=$(appName)"
+      echo "appNameLower=$appNameLower"
+      echo "##vso[task.setvariable variable=appNameLower]$appNameLower"
+
+      runDateTime=$(echo $(date '+%Y%m%d-%H%M%S'))
+      echo "##vso[task.setvariable variable=runDateTime]$runDateTime"
+      echo "runDateTime=$runDateTime"
+                                   
+      runDateTimeZ=$(echo $(date '+%Y%m%dT%H%M%SZ'))
+      echo "##vso[task.setvariable variable=runDateTimeZ]$runDateTimeZ"
+      echo "runDateTimeZ=$runDateTimeZ"
+    displayName: 'Create Variables'
+    continueOnError: true
+
+  - bash: |
+      echo "appVariableGroupName=${{ parameters.appVariableGroupName }}"
+      echo "companyVariableGroupName=${{ parameters.companyVariableGroupName }}"
+      echo "plantVariableGroupName=${{ parameters.plantVariableGroupName }}"
+      echo "lineVariableGroupName=${{ parameters.lineVariableGroupName }}"
+      echo "resourceGroupName=$(resourceGroupName)"
+      echo "resourceGroupLine=$(resourceGroupLine)"
+      echo "resourceGroupPlant=$(resourceGroupPlant)"
+      echo "createInfra=$(createInfraVar)"
+      echo "lineTemplateFile=$(lineTemplateFile)"
+      echo "plantTemplateFile=$(plantTemplateFile)"
+      echo "serviceConnectionName=$(serviceConnectionName)"
+      echo "environmentNameUpper=$(environmentNameUpper)"
+      echo "environmentNameLower=$(environmentNameLower)"
+      echo "location=$(location)"
+      echo "orgName=$(orgName)"
+      echo "orgNameLower=$(orgNameLower)"
+      echo "appName=$(appName)"
+      echo "appNameLower=$(appNameLower)"
+      echo "lineAppName=$(lineAppName)"
+      echo "storageSku=$(storageSku)"
+      echo "functionAppSku=$(functionAppSku)"
+      echo "functionAppSkuFamily=$(functionAppSkuFamily)"
+      echo "functionAppSkuTier=$(functionAppSkuTier)"
+      echo "keyVaultOwnerUserId=$(keyVaultOwnerUserId)"
+      echo "runDateTime=$(runDateTime)"
+      echo "runDateTimeZ=$(runDateTimeZ)"
+      echo "compiledJsonFile=$(compiledJsonFile)"
+      echo "Resource Group Command:"
+      echo "  az group create --name $(resourceGroupLine) --location $(location) --tags LastDeployed=$(runDateTime) Organization=$(orgName) Application=$(appName) Environment=$(environmentNameUpper)"
+      echo "  az group create --name $(resourceGroupPlant) --location $(location) --tags LastDeployed=$(runDateTime) Organization=$(orgName) Application=$(appName) Environment=$(environmentNameUpper)"
+      echo "Bicep Deploy Sample Command:"
+      echo "  az deployment group create -n main-deploy-$(runDateTimeZ) --resource-group $(resourceGroupName) --template-file 'main-plant.bicep' --parameters environmentCode $(environmentNameLower) location $(location) orgName $(orgName) appName $(appName) storageSku $(storageSku) keyVaultOwnerUserId $(keyVaultOwnerUserId) runDateTime $(runDateTime)"
+      echo "  az deployment group create -n main-deploy-$(runDateTimeZ) --resource-group $(resourceGroupName) --template-file 'main-line.bicep'  --parameters environmentCode $(environmentNameLower) location $(location) orgName $(orgName) appName $(appName) storageSku $(storageSku) functionAppSku $(functionAppSku) functionAppSkuFamily $(functionAppSkuFamily) functionAppSkuTier $(functionAppSkuTier) keyVaultOwnerUserId $(keyVaultOwnerUserId) runDateTime $(runDateTime)"
+    displayName: 'Display Variables'
+    continueOnError: true
+
+  - ${{ if eq(lower(parameters.createInfra), 'true') }}:
+    - task: AzureCLI@2
+      name: createPlantResourceGroup
+      displayName: 'RG: Create Plant Resource Group'
+      inputs:
+        azureSubscription: $(serviceConnectionName)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: az group create --name $(resourceGroupPlant) --location $(location) --tags LastDeployed=$(runDateTime) Organization=$(orgName) Application=$(appName) Environment=$(environmentNameUpper)
+    - task: AzureCLI@2
+      name: createLineResourceGroup
+      displayName: 'RG: Create Line Resource Group'
+      inputs:
+        azureSubscription: $(serviceConnectionName)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: az group create --name $(resourceGroupLine) --location $(location) --tags LastDeployed=$(runDateTime) Organization=$(orgName) Application=$(appName) Environment=$(environmentNameUpper)
+
+    # ------------------------------------------------------------------------------------------------------------------------
+    # Plant and Line Bicep Files
+    # ------------------------------------------------------------------------------------------------------------------------
+    - task: AzureResourceManagerTemplateDeployment@3
+      name: publishLineBicepResources
+      displayName: Publish Line Bicep Resources
+      inputs:
+        csmFile: $(lineTemplateFile)
+        overrideParameters: >
+          -orgName $(orgName)
+          -appName $(lineAppName)
+          -environmentCode $(environmentNameLower)
+          -keyVaultOwnerUserId $(keyVaultOwnerUserId)
+          -location $(location)
+          -storageSku $(storageSku)
+          -functionAppSku $(functionAppSku)
+          -functionAppSkuFamily $(functionAppSkuFamily)
+          -functionAppSkuTier $(functionAppSkuTier)
+          -twilioAccountSid $(twilioAccountSid)
+          -twilioAuthToken $(twilioAuthToken)
+          -twilioPhoneNumber $(twilioPhoneNumber)
+          -runDateTime $(runDateTime)
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(serviceConnectionName)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: '$(resourceGroupName)'
+        location: '$(location)'
+        templateLocation: 'Linked artifact'
+        deploymentMode: 'Incremental'
+
+    - task: AzureResourceManagerTemplateDeployment@3
+      name: publishPlantBicepResources
+      displayName: 'Publish Plant Bicep Resources'
+      inputs:
+        csmFile: $(plantTemplateFile)
+        overrideParameters: >
+          -orgName $(orgName)
+          -appName $(lineAppName)
+          -environmentCode $(environmentNameLower)
+          -keyVaultOwnerUserId $(keyVaultOwnerUserId)
+          -location $(location)
+          -runDateTime $(runDateTime)
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(serviceConnectionName)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: '$(resourceGroupPlant)'
+        location: '$(location)'
+        templateLocation: 'Linked artifact'
+        deploymentMode: 'Incremental'

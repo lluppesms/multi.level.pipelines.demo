@@ -1,0 +1,29 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Pipe to demonstrate accessing multiple variable groups in a single pipeline
+# ------------------------------------------------------------------------------------------------------------------------
+parameters:
+- name: environments
+  type: object
+  default: ['DEMO']
+- name: appBaseName
+  type: string
+  default: 'myAppVariableGroupName'
+- name: commonBaseName
+  type: string
+  default: 'myCommonVariableGroupName'
+- name: customBaseName
+  type: string
+  default: 'myCustomVariableGroupName'
+
+# ----------------------------------------------------------------------------------------------------
+stages:
+- ${{ each environmentName in parameters.environments }} :
+  - stage: DisplayVariables${{ environmentName }}
+    displayName: ${{ environmentName }} Variables
+    jobs:
+    - template: templates/generic-level1-template.yml
+      parameters:
+        appVariableGroupName: '${{ parameters.appBaseName }}'
+        commonVariableGroupName: '${{ parameters.commonBaseName }}'
+        customVariableGroupName: '${{ parameters.customBaseName }}${{ environmentName }}'
+        environmentName: ${{ environmentName }}

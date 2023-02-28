@@ -1,0 +1,19 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Pipeline to demonstrate accessing multiple variable groups in a single pipeline
+# ------------------------------------------------------------------------------------------------------------------------
+name: $(date:yyyy).$(date:MM).$(date:dd)$(rev:.r)
+pool:
+  vmImage: ubuntu-latest
+
+# ------------------------------------------------------------------------------------------------------------------------
+trigger:
+  - none
+
+# ----------------------------------------------------------------------------------------------------
+stages:
+- template: pipes/generic-pipe.yml
+  parameters:
+    appBaseVariableGroupName: 'MfgApp'
+    commonBaseVariableGroupName: 'MfgPlant'
+    customBaseVariableGroupName: 'MfgLine1'
+    environments: ['DEV','QA']

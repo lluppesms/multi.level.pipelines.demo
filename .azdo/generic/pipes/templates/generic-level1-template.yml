@@ -1,0 +1,105 @@
+# ----------------------------------------------------------------------------------------------------
+# Template to display variables
+# ----------------------------------------------------------------------------------------------------
+parameters:
+- name: appVariableGroupName
+  default: 'myAppVariableGroupName'
+- name: commonVariableGroupName
+  default: 'myCommonVariableGroupName'
+- name: customVariableGroupName
+  default: 'myCustomVariableGroupName'
+- name: environmentName
+  default: 'DEV'
+
+# ----------------------------------------------------------------------------------------------------
+jobs:
+- deployment: InitTemplate
+  displayName: Init Template
+  environment: ${{ parameters.environmentName }}
+
+- job: VariableTemplate
+  displayName: Template Variables
+  variables:
+    - group: ${{ parameters.appVariableGroupName }}
+    - group: ${{ parameters.commonVariableGroupName }}
+    - group: ${{ parameters.customVariableGroupName }}
+    - name: commonVariableGroupName
+      value: ${{ parameters.commonVariableGroupName }}
+    - name: customVariableGroupName
+      value: ${{ parameters.customVariableGroupName }}
+    - name: environmentName
+      value: ${{ parameters.environmentName }}
+    - name: environmentNameUpper
+      value: ${{ upper(parameters.environmentName) }}
+    - name: environmentNameLower
+      value: ${{ lower(parameters.environmentName) }}
+
+  steps:
+  - bash: |
+      appNameLower=$(echo "$(appName)" | tr '[:upper:]' '[:lower:]')
+      echo "appName=$(appName)"
+      echo "appNameLower=$appNameLower"
+      echo "##vso[task.setvariable variable=appNameLower]$appNameLower"
+
+      resourceGroupName=$(echo "rg-$(appName)-$(environmentNameLower)" | tr '[:upper:]' '[:lower:]')
+      echo "resourceGroupName=$resourceGroupName"
+      echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
+      
+      runDateTime=$(echo $(date '+%Y%m%d-%H%M%S'))
+      echo "##vso[task.setvariable variable=runDateTime]$runDateTime"
+      echo "runDateTime=$runDateTime"
+                                   
+      runDateTimeZ=$(echo $(date '+%Y%m%dT%H%M%SZ'))
+      echo "##vso[task.setvariable variable=runDateTimeZ]$runDateTimeZ"
+      echo "runDateTimeZ=$runDateTimeZ"
+    displayName: 'Create Variables'
+    continueOnError: true
+
+  # display variable values in level 1 template
+  - bash: |
+      echo "environmentName=${{ parameters.environmentName }}"
+      echo "environmentNameUpper=$(environmentNameUpper)"
+      echo "environmentNameLower=$(environmentNameLower)"
+      echo "runDateTime=$(runDateTime)"
+      echo "runDateTimeZ=$(runDateTimeZ)"
+      echo "resourceGroupName=$(resourceGroupName)"
+      echo "----------------------------------------"
+      echo "appVariableGroupName=$(appVariableGroupName)"
+      echo "commonVariableGroupName=$(commonVariableGroupName)"
+      echo "customVariableGroupName=$(customVariableGroupName)"
+      echo "appName=$(appName)"
+      echo "plantName=$(plantName)"
+      echo "iotHubName=$(iotHubName)"
+      echo "----------------------------------------"
+      echo "platform=$(platform)"
+      echo "lineName=$(lineName)"
+      echo "deviceId=$(deviceId)"
+      echo "rate=$(rate)"
+    displayName: Display 1.1 Variables in Level 1 Template
+    continueOnError: true
+
+  # pass in variable values to level 2 template
+  - template: generic-level2-template.yml
+    parameters:
+      environmentName: $(environmentName)
+      resourceGroupName: $(resourceGroupName)
+      appName: $(appName)
+      plantName: $(plantName)
+      iotHubName: $(iotHubName)
+      platform: $(platform)
+      lineName: $(lineName)
+      deviceId: $(deviceId)
+      rate: $(rate)
+
+  # pass in MODIFIED variable values to level 2 template
+  - template: generic-level2-template.yml
+    parameters:
+      environmentName: '$(environmentName).level2'
+      resourceGroupName: '$(resourceGroupName).level2'
+      appName: '$(appName).level2'
+      plantName: '$(plantName).level2'
+      iotHubName: '$(iotHubName).level2'
+      platform: '$(platform).level2'
+      lineName: '$(lineName).level2'
+      deviceId: '$(deviceId).level2'
+      rate: '$(rate).level2'

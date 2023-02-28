@@ -1,0 +1,69 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Template to deploy Bicep Container Registry in Azure
+# ------------------------------------------------------------------------------------------------------------------------
+# This pipeline needs four variables defined in App Variable Group AzDO:
+#  subscriptionName:           'yourSubscriptionName'
+#  serviceConnectionName:      'yourServiceConnectionName'
+#  containerRegistryName:      'yourContainerRegistryName'
+#  containerResourceGroupName: 'yourResourceGroupName'
+#  location:                   'eastus'
+# ------------------------------------------------------------------------------------------------------------------------
+parameters:
+- name: variableGroupName
+  default: 'myVariableGroup'
+- name: templateFolderName
+  default: 'infra/Bicep'
+- name: templateFileName
+  default: 'main-container.bicep'
+
+jobs:
+- deployment: CreateACR
+  displayName: Initialize Create ACR
+  environment: 'DEV'
+
+- job: CreateACRJob
+  displayName: Create ACR
+  variables:
+    - group: ${{ parameters.variableGroupName }}
+    - name: templateFile
+      value: '$(Pipeline.Workspace)/s/${{ parameters.templateFolderName }}/${{ parameters.templateFileName }}'
+
+  steps:
+  - bash: |
+      runDateTime=$(echo $(date '+%Y%m%d-%H%M%S'))
+      echo "##vso[task.setvariable variable=runDateTime]$runDateTime"
+      echo "runDateTime=$runDateTime"
+    displayName: 'Create Variables'
+
+  - bash: |
+      echo "subscriptionName=$(subscriptionName)"
+      echo "serviceConnectionName=$(serviceConnectionName)"
+      echo "containerResourceGroupName=$(containerResourceGroupName)"
+      echo "containerRegistryName=$(containerRegistryName)"
+      echo "templateFile=$(templateFile)"
+      echo "runDateTime=$(runDateTime)"
+    displayName: 'Display Variables'
+    continueOnError: true
+
+  - task: AzureCLI@2
+    displayName: 'Create Resource Group'
+    inputs:
+      azureSubscription: $(subscriptionName)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: az group create --name $(containerResourceGroupName) --location $(location)
+
+  - task: AzureResourceManagerTemplateDeployment@3
+    displayName: 'Publish Bicep Resources'
+    inputs:
+      csmFile: $(templateFile)
+      overrideParameters: >
+        -orgName $(orgName) 
+        -appName $(appName) 
+      deploymentScope: 'Resource Group'
+      azureResourceManagerConnection: $(serviceConnectionName)
+      action: 'Create Or Update Resource Group'
+      resourceGroupName: $(containerResourceGroupName)
+      location: $(location)
+      templateLocation: 'Linked artifact'
+      deploymentMode: 'Incremental'

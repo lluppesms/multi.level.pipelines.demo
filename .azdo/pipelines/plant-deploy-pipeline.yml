@@ -1,0 +1,53 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Pipeline to demonstrate accessing multiple variable groups in a single pipeline
+# ------------------------------------------------------------------------------------------------------------------------
+name: $(date:yyyy).$(date:MM).$(date:dd)$(rev:.r)
+pool:
+  vmImage: windows-latest
+  #vmImage: ubuntu-latest
+
+# ------------------------------------------------------------------------------------------------------------------------
+trigger:
+  - none
+
+# ------------------------------------------------------------------------------------------------------------------------
+parameters:
+  - name: runDevSecOpsScan
+    displayName: Run MS DevSecOps Scan
+    type: boolean
+    default: false
+  - name: runPsRuleScan
+    displayName: Run PSRule Bicep Scan
+    type: boolean
+    default: false
+  - name: createInfra
+    displayName: Create Azure Resources
+    type: boolean
+    default: true
+  - name: deployApp
+    displayName: Publish App Binaries
+    type: boolean
+    default: true
+  - name: buildIoTEdge
+    displayName: Build IoT Edge Module
+    type: boolean
+    default: false
+
+# ----------------------------------------------------------------------------------------------------
+stages:
+- template: pipes/plant-deploy-pipe.yml
+  parameters:
+    environments: ['DEV','QA']
+    mfgLines: ['Line1','Line2']
+    appBaseVariableGroupName: 'MfgApp'
+    companyBaseVariableGroupName: 'MfgCompany'
+    plantBaseVariableGroupName: 'MfgPlant'
+    lineBaseVariableGroupName: 'MfgLine'
+    edgeSolutionDirectory: 'src/Iot.Edge.Example/IoTEdgeSolution/'
+    edgeContainerRegistryName:  'myContainerRegistryName'
+    funcAppFolder: 'src/Function.App/'
+    funcAppProject: 'Durable.Demo.csproj'
+    runDevSecOpsScan: ${{ parameters.runDevSecOpsScan }}
+    runPsRuleScan: ${{ parameters.runPsRuleScan }}
+    createInfra: ${{ parameters.createInfra }}
+    deployApp: ${{ parameters.deployApp }}

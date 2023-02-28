@@ -1,0 +1,143 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Pipe to demonstrate accessing multiple variable groups in a single pipeline
+# ------------------------------------------------------------------------------------------------------------------------
+parameters:
+- name: environments
+  type: object
+  default: ['DEMO']
+- name: mfgLines
+  type: object
+  default: ['LINE1']
+- name: appBaseVariableGroupName
+  type: string
+  default: 'myAppBaseVariableGroupName'
+- name: companyBaseVariableGroupName
+  type: string
+  default: 'myCompanyBaseVariableGroupName'
+- name: plantBaseVariableGroupName
+  type: string
+  default: 'myPlantBaseVariableGroupName'
+- name: lineBaseVariableGroupName
+  type: string
+  default: 'myLineBaseVariableGroupName'
+- name: funcAppFolder
+  default:  'src/myProjectFolder/'
+- name: funcAppProject
+  default:  'myProject.csproj'
+- name: edgeSolutionDirectory
+  default: 'Simulator/*.sln'
+- name: edgeDeploymentFileName
+  default: 'deployment.template.json'
+- name: edgeContainerRegistryName
+  default:  'myContainerRegistryName'
+- name: runDevSecOpsScan
+  default: 'true'
+- name: runPsRuleScan
+  default: 'true'
+- name: createInfra
+  default: 'false'
+- name: deployApp
+  default: 'false'
+- name: buildIoTEdge
+  default: 'false'
+
+# ----------------------------------------------------------------------------------------------------
+stages:
+- stage: BuildACR
+  displayName: Build ACR
+  jobs:
+  - template: templates/create-bicep-container-registry-template.yml
+    parameters:
+      variableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+
+# ----------------------------------------------------------------------------------------------------
+- stage: BuildApplication
+  displayName: Build Application
+  jobs:
+  - ${{ if or(eq(lower(parameters.runDevSecOpsScan), 'true'), eq(lower(parameters.runPsRuleScan), 'true')) }}:
+    - template: templates/scan-code-template.yml
+      parameters:
+        environmentName: 'DEV'
+        runDevSecOpsScan: ${{ parameters.runDevSecOpsScan }}
+        runPsRuleScan: ${{ parameters.runPsRuleScan }}
+
+  - ${{ if eq(lower(parameters.buildIoTEdge), 'true') }}:
+    - template: templates/iot-edge-deploy-template.yml
+      parameters:
+        variableGroupName: '${{ parameters.plantBaseVariableGroupName }}'
+        environmentName: 'DEV'
+        solutionDirectory: '${{ parameters.edgeSolutionDirectory }}'
+        deploymentFileName: '${{ parameters.edgeDeploymentFileName }}'
+        containerRegistryName: '${{ parameters.edgeContainerRegistryName }}'
+
+  - template: templates/build-function-template.yml
+    parameters:
+      variableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+      environmentName: 'DEV'
+      appFolder: '${{ parameters.funcAppFolder }}'
+      appProject: '${{ parameters.funcAppProject }}'
+
+# ----------------------------------------------------------------------------------------------------
+- ${{ each thisLineName in parameters.mfgLines }} :
+  - ${{ each environmentName in parameters.environments }} :
+    # ----  If user wants to deploy Azure Resources but NOT deploy the app binaries ---- 
+    - ${{ if and(eq(lower(parameters.createInfra), 'true'), eq(lower(parameters.deployApp), 'false')) }}:
+      - stage: CreateInfra${{ thisLineName }}${{ environmentName }}
+        displayName: ${{ thisLineName }} ${{ environmentName }} Infra
+        dependsOn: ['BuildApplication', 'BuildACR']
+        condition: succeeded('BuildApplication')
+        jobs:
+        - template: templates/create-infra-template.yml
+          parameters:
+            appVariableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+            companyVariableGroupName: '${{ parameters.companyBaseVariableGroupName }}'
+            plantVariableGroupName: '${{ parameters.plantBaseVariableGroupName }}${{ environmentName }}'
+            lineVariableGroupName: '${{ parameters.lineBaseVariableGroupName }}${{ thisLineName }}${{ environmentName }}'
+            environmentName: '${{ environmentName }}'
+            createInfra: '${{ parameters.createInfra }}'
+
+    # ----  If user wants to deploy the app binaries but NOT deploy Azure Resources ---- 
+    - ${{ if and(eq(lower(parameters.createInfra), 'false'), eq(lower(parameters.deployApp), 'true')) }}:
+      - stage: DeployApp${{ thisLineName }}${{ environmentName }}
+        displayName: ${{ thisLineName }} ${{ environmentName }} Deploy App
+        dependsOn: ['BuildApplication', 'BuildACR']
+        condition: succeeded('BuildApplication')
+        jobs:
+        - template: templates/deploy-function-template.yml
+          parameters:
+            appVariableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+            companyVariableGroupName: '${{ parameters.companyBaseVariableGroupName }}'
+            plantVariableGroupName: '${{ parameters.plantBaseVariableGroupName }}${{ environmentName }}'
+            lineVariableGroupName: '${{ parameters.lineBaseVariableGroupName }}${{ thisLineName }}${{ environmentName }}'
+            environmentName: '${{ environmentName }}'
+            isMainBranch: $[or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))]
+
+    # ---- If user wants to deploy Azure Resources AND deploy the app binaries ---- 
+    - ${{ if and(eq(lower(parameters.createInfra), 'true'), eq(lower(parameters.deployApp), 'true')) }}:
+      - stage: CreateInfra${{ thisLineName }}${{ environmentName }}
+        displayName: ${{ thisLineName }} ${{ environmentName }} Infra
+        dependsOn: ['BuildApplication', 'BuildACR']
+        condition: succeeded('BuildApplication')
+        jobs:
+        - template: templates/create-infra-template.yml
+          parameters:
+            appVariableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+            companyVariableGroupName: '${{ parameters.companyBaseVariableGroupName }}'
+            plantVariableGroupName: '${{ parameters.plantBaseVariableGroupName }}${{ environmentName }}'
+            lineVariableGroupName: '${{ parameters.lineBaseVariableGroupName }}${{ thisLineName }}${{ environmentName }}'
+            environmentName: '${{ environmentName }}'
+            createInfra: '${{ parameters.createInfra }}'
+
+      - stage: DeployApp${{ thisLineName }}${{ environmentName }}
+        displayName: ${{ thisLineName }} ${{ environmentName }} Deploy App
+        dependsOn: CreateInfra${{ thisLineName }}${{ environmentName }}
+        condition: succeeded('CreateInfra${{ thisLineName }}${{ environmentName }}')
+        jobs:
+        - template: templates/deploy-function-template.yml
+          parameters:
+            appVariableGroupName: '${{ parameters.appBaseVariableGroupName }}'
+            companyVariableGroupName: '${{ parameters.companyBaseVariableGroupName }}'
+            plantVariableGroupName: '${{ parameters.plantBaseVariableGroupName }}${{ environmentName }}'
+            lineVariableGroupName: '${{ parameters.lineBaseVariableGroupName }}${{ thisLineName }}${{ environmentName }}'
+            environmentName: '${{ environmentName }}'
+            isMainBranch: $[or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))]

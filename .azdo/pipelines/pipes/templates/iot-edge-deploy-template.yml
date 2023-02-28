@@ -1,0 +1,95 @@
+# ------------------------------------------------------------------------------------------------------------------------
+# Pipeline to build IoT Edge Module
+# https://learn.microsoft.com/en-us/azure/iot-edge/how-to-continuous-integration-continuous-deployment?view=iotedge-1.4
+# ------------------------------------------------------------------------------------------------------------------------
+parameters:
+- name: variableGroupName
+  default: 'myVariableGroupName'
+- name: environmentName
+  default:  'DEV'
+- name: solutionDirectory
+  default: 'appDir'
+- name: deploymentFileName
+  default: 'deployment.template.json'
+- name: containerRegistryName
+  default: myContainerRegistryName
+
+# ------------------------------------------------------------------------------------------------------------------------
+jobs:
+- job: Build${{ parameters.environmentName }}EdgeApp
+  displayName: Build ${{ parameters.environmentName }} Edge App
+
+  variables:
+    #- group: CodeSigning
+    - name: variableGroupName
+      value: ${{ parameters.variableGroupName }}
+    - name: environmentName
+      value: ${{ parameters.environmentName }}
+    - name: solutionDirectory
+      value: ${{ parameters.solutionDirectory }}
+    - name: deploymentFileName
+      value: ${{ parameters.deploymentFileName }}
+    - name: deploymentFilePathName
+      value: '$(solutionDirectory)/$(deploymentFileName)'
+    - name: containerRegistryName
+      value: ${{ parameters.containerRegistryName }}
+    - name: azureContainerRegistry
+      value: '{"loginServer":"${{ parameters.containerRegistryName }}.azurecr.io"}'
+    - name: buildPlatform
+      value: 'amd64'
+    - name: buildConfiguration
+      value: 'Release'
+
+  steps:
+  - bash: |
+      echo "variableGroupName=$(variableGroupName)"
+      echo "environmentName=$(environmentName)"
+      echo "solutionDirectory=$(solutionDirectory)"
+      echo "deploymentFileName=$(deploymentFileName)"
+      echo "containerRegistryName=$(containerRegistryName)"
+      echo "azureContainerRegistry=$(azureContainerRegistry)"
+      echo "buildPlatform=$(buildPlatform)"
+      echo "buildConfiguration=$(buildConfiguration)"
+    displayName: 'Display Variables'
+    continueOnError: true
+
+  - task: CmdLine@2
+    displayName: 'Show Working Directory'
+    inputs:
+      script: |
+        echo "Directory of System.DefaultWorkingDirectory:"
+        dir $(System.DefaultWorkingDirectory) /s
+    continueOnError: true
+
+  - task: AzureIoTEdge@2
+    displayName: 'IoT Edge Build'
+    inputs:
+      action: 'Build module images'
+      deploymentFilePath: '$(solutionDirectory)'
+      templateFilePath: '$(deploymentFilePathName)'
+      defaultPlatform: '$(buildPlatform)'
+
+  - task: AzureIoTEdge@2
+    displayName: 'IoT Edge Push'
+    inputs:
+      action: 'Push module images'
+      containerregistrytype: 'Azure Container Registry'
+      azureSubscriptionEndpoint: '$(serviceConnectionName)'
+      azureContainerRegistry: '$(azureContainerRegistry)'
+      templateFilePath: '$(deploymentFileName)'
+      defaultPlatform: '$(buildPlatform)'
+      fillRegistryCredential: 'true'
+
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: '$(agent.builddirectory).'
+      Contents: |
+        deployment.template.json
+        **/module.json
+      TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'

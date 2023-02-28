@@ -1,0 +1,44 @@
+# ----------------------------------------------------------------------------------------------------
+# Template to display variables
+# ----------------------------------------------------------------------------------------------------
+parameters:
+  environmentName: ''
+  resourceGroupName: ''
+  appName: ''
+  plantName: ''
+  iotHubName: ''
+  platform: ''
+  lineName: ''
+  deviceId: ''
+  rate: ''
+
+# ----------------------------------------------------------------------------------------------------
+steps:
+# shows variable values from the level1-template file...
+- bash: |
+    echo "environmentName=$(environmentName)"
+    echo "resourceGroupName=$(resourceGroupName)"
+    echo "appName=$(appName)"
+    echo "plantName=$(plantName)"
+    echo "iotHubName=$(iotHubName)"
+    echo "platform=$(platform)"
+    echo "lineName=$(lineName)"
+    echo "deviceId=$(deviceId)"
+    echo "rate=$(rate)"
+  displayName: Display 2.1 Variables From Level 1 Parent
+  continueOnError: true
+
+# shows variable values from the parameters passed to the level2-template file...
+- bash: |
+    echo "parameters.environmentName=${{ parameters.environmentName }}"
+    echo "parameters.resourceGroupName=${{ parameters.resourceGroupName }}"
+    echo "parameters.appName=${{ parameters.appName }}"
+    echo "parameters.plantName=${{ parameters.plantName }}"
+    echo "parameters.iotHubName=${{ parameters.iotHubName }}"
+    echo "parameters.platform=${{ parameters.platform }}"
+    echo "parameters.lineName=${{ parameters.lineName }}"
+    echo "parameters.deviceId=${{ parameters.deviceId }}"
+    echo "parameters.rate=${{ parameters.rate }}"
+  displayName: Display 2.2 Variables From Level 2 Parameters
+  continueOnError: true
+

@@ -1,0 +1,70 @@
+# ----------------------------------------------------------------------------------------------------
+# Template to deploy a pre-built Azure Function artifact to one environment
+# ----------------------------------------------------------------------------------------------------
+parameters: 
+- name: appVariableGroupName
+  default: 'myAppVariableGroup'
+- name: companyVariableGroupName
+  default: 'myCompanyVariableGroup'
+- name: plantVariableGroupName
+  default: 'myPlantVariableGroup'
+- name: lineVariableGroupName
+  default: 'myLineVariableGroup'
+- name: environmentName
+  default:  'DEV'
+- name: isMainBranch
+  default: true
+
+# ----------------------------------------------------------------------------------------------------
+jobs:
+- deployment: InitializeDeploy${{ parameters.environmentName }}Function
+  displayName: Initialize Deploy ${{ parameters.environmentName }} Function
+  environment: ${{ parameters.environmentName }}
+
+- job: Deploy${{ parameters.environmentName }}Function
+  displayName: Deploy ${{ parameters.environmentName }} Function
+  variables:
+    - group: ${{ parameters.appVariableGroupName }}
+    - group: ${{ parameters.companyVariableGroupName }}
+    - group: ${{ parameters.plantVariableGroupName }}
+    - group: ${{ parameters.lineVariableGroupName }}
+    - name: environmentName
+      value: ${{ parameters.environmentName }}
+    - name: isMainBranch
+      value: ${{ parameters.isMainBranch }}
+
+  steps:
+  - bash: |
+      functionAppName=$(echo "$(orgName)-$(lineAppName)-$(environmentName)" | tr '[:upper:]' '[:lower:]')
+      echo "##vso[task.setvariable variable=functionAppName]$functionAppName"
+    displayName: 'Create Variables'
+
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download Pipeline Artifacts'
+    inputs:
+      artifact: functionmodule
+
+  - task: CmdLine@2
+    inputs:
+      script: |
+        echo "serviceConnectionName=$(serviceConnectionName)"
+        echo "azureSubscription=$(azureSubscription)"
+        echo "environmentName=$(environmentName)"
+        echo "appName=$(appName)"
+        echo "lineAppName=$(lineAppName)"
+        echo "functionAppName=$(functionAppName)"
+        echo "isMainBranch=$(isMainBranch)"
+        echo "Directory of pipeline workspace:"
+        tree $(Pipeline.Workspace)
+    displayName: 'Display Variables and Tree'
+    continueOnError: true
+
+  - task: AzureFunctionApp@1
+    displayName: 'Function App Deploy'
+    retryCountOnTaskFailure: 2
+    condition: eq(variables['isMainBranch'], 'true')
+    inputs:
+      azureSubscription: $(azureSubscription)
+      appType: functionAppLinux
+      appName: $(functionAppName)
+      package: $(Pipeline.Workspace)/*.zip
