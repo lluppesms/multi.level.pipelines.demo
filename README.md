@@ -13,9 +13,21 @@ The variables above will create two plants (environments) each with two lines an
 
 ![Pipeline Resources](/docs/Diagram.png)
 
+The [Create Variable Groups](/.azdo/CreateDevOpsVariableGroups.md) document will give you the info needed to create variable groups that look like this:
+
+![Variable Groups](/docs/VariableGroups.png)
+
+These pipelines will create resource groups in Azure that look like this:
+
+![Resource Groups](/docs/ResourceGroups.png)
+
+---
+
 ## Notes
 
 The build/deploy of the IoT Edge modules is still not working and deploying to the Container Registry.... I'm still working on that. For now - it just creates an ACR and has a variable setting which will let you bypass the Edge compilation.
+
+---
 
 ## Reference
 
