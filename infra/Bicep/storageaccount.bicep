@@ -1,10 +1,6 @@
 ﻿// --------------------------------------------------------------------------------
 // This BICEP file will create storage account
-// --------------------------------------------------------------------------------
-// To deploy this Bicep manually:
-// 	 az login   (do this if not already logged in)
-//   az account set --subscription 1bd3dfe5-ddd8-443c-8d35-31cf3d729c8f
-//   az deployment group create -n lll-storage -g RG-BICEP-WORKSHOP-01 -f 'storageaccount.bicep' -p storageAccountName=lllstoragedemo
+// FYI: To purge a storage account with soft delete enabled: > az storage account purge --name storeName
 // --------------------------------------------------------------------------------
 param storageAccountName string = 'mystorageaccountname'
 param location string = resourceGroup().location
@@ -13,6 +9,9 @@ param commonTags object = {}
 @allowed([ 'Standard_LRS', 'Standard_GRS', 'Standard_RAGRS' ])
 param storageSku string = 'Standard_LRS'
 param storageAccessTier string = 'Hot'
+param containerNames array = ['input','output']
+@allowed(['Allow','Deny'])
+param allowNetworkAccess string = 'Allow'
 
 // --------------------------------------------------------------------------------
 var templateTag = { TemplateFile: '~storageAccount.bicep' }
@@ -30,10 +29,10 @@ resource storageAccountResource 'Microsoft.Storage/storageAccounts@2019-06-01' =
     properties: {
         networkAcls: {
             bypass: 'AzureServices'
-            virtualNetworkRules: []
+            defaultAction: allowNetworkAccess
             ipRules: []
-            defaultAction: 'Allow'
-            // defaultAction: 'Deny' // - security rules want 'Deny', but that makes the app deploy break...!
+            virtualNetworkRules: []
+            //virtualNetworkRules: ((virtualNetworkType == 'External') ? json('[{"id": "${subscription().id}/resourceGroups/${vnetResource}/providers/Microsoft.Network/virtualNetworks/${vnetResource.name}/subnets/${subnetName}"}]') : json('[]'))
         }
         supportsHttpsTrafficOnly: true
         encryption: {
@@ -56,7 +55,8 @@ resource storageAccountResource 'Microsoft.Storage/storageAccounts@2019-06-01' =
 }
 
 resource blobServiceResource 'Microsoft.Storage/storageAccounts/blobServices@2019-06-01' = {
-    name: '${storageAccountResource.name}/default'
+    parent: storageAccountResource
+    name: 'default'
     properties: {
         cors: {
             corsRules: [
@@ -69,5 +69,16 @@ resource blobServiceResource 'Microsoft.Storage/storageAccounts/blobServices@201
     }
 }
 
+resource containers 'Microsoft.Storage/storageAccounts/blobServices/containers@2019-06-01' = [for containerName in containerNames: {
+    name: '${containerName}'
+    parent: blobServiceResource
+    properties: {
+      publicAccess: 'None'
+      metadata: {}
+    }
+  }]
+
+
+// --------------------------------------------------------------------------------
 output id string = storageAccountResource.id
 output name string = storageAccountResource.name
